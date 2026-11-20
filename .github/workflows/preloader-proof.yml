@@ -1,0 +1,33 @@
+name: Preloader regression proof
+on:
+  push:
+    branches: [proof/preloader-windows]
+permissions:
+  contents: read
+jobs:
+  preloader:
+    runs-on: windows-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - name: Prove the old writer hits a sharing violation
+        shell: pwsh
+        run: |
+          git restore --source=013a108ee1aa6f8912aa97a4832397a781a8051e -- Shared/Preloader.cs
+          $PSNativeCommandUseErrorActionPreference = $false
+          $output = dotnet run --project Tests/Preloader -f net10.0 -c Release 2>&1
+          $code = $LASTEXITCODE
+          $output
+          if ($code -eq 0 -or "$output" -notmatch 'used by another process' -or "$output" -notmatch 'ModuleDefinition.Write') {
+            throw 'The old writer did not hit the expected sharing violation'
+          }
+          git restore -- Shared/Preloader.cs
+      - name: Check Windows .NET 10
+        run: dotnet run --project Tests/Preloader -f net10.0 -c Release
+      - name: Check Windows .NET Framework 4.8
+        run: dotnet run --project Tests/Preloader -f net48 -c Release
